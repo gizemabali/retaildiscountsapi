@@ -332,7 +332,7 @@ public class ElasticClientOperations {
 	 * @throws Exception
 	 */
 	public ResponseEntity<String> createUser(JsonObject userDetailsObj, String index) throws Exception {
-		userDetailsObj.addProperty(ACCOUNT_CREATION_DATE, DateOperations.getInstance().getCurrentDate());
+		userDetailsObj.addProperty(ACCOUNT_CREATION_DATE, getDateOperations().getCurrentDate());
 		String password = userDetailsObj.get(PASSWORD).getAsString();
 		userDetailsObj.addProperty(PASSWORD, ExternalHashOperations.getInstance().hashText(password));
 		String docId = indexDocument(index, userDetailsObj, null);
@@ -345,6 +345,10 @@ public class ElasticClientOperations {
 			statusCode = 500;
 		}
 		return ResponseEntity.status(statusCode).body(responseObj.toString());
+	}
+
+	public DateOperations getDateOperations() {
+		return DateOperations.getInstance();
 	}
 
 	/**
