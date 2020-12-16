@@ -38,49 +38,9 @@ import com.google.gson.JsonParser;
 @Component
 public class ElasticClientOperations {
 
-	private static final String COULD_NOT_CLOSE_THE_CLIENT = "could not close the client!";
+	private static final DateOperations dateOperations = DateOperations.getInstance();
 
-	private static final String COULD_NOT_SEARCH_IN_ELASTIC = "could not search in elastic!";
-
-	private static final String UNEXPECTED_ERROR_OCCUR = "unexpected error occur";
-
-	private static final String ERROR = "error";
-
-	private static final String PASSWORD = "password";
-
-	private static final String SUCCESS = "success";
-
-	private static final String FAILURE = "failure";
-
-	private static final String STATUS = "status";
-
-	private static final String PRICE = "price";
-
-	private static final String GROCERIES = "groceries";
-
-	private static final String TYPE = "type";
-
-	private static final String GMT_3 = "GMT+3";
-
-	private static final String YYYY_MM_DD_HH_MM_SS = "yyyy-MM-dd HH:mm:ss";
-
-	private static final String ACCOUNT_CREATION_DATE = "accountCreationDate";
-
-	private static final String TOTAL_PRICE = "totalPrice";
-
-	private static final String AMOUNT = "amount";
-
-	private static final String PRODUCT_NAME = "productName";
-
-	private static final String BASKET_DETAILS = "basketDetails";
-
-	private static final String USER_DETAILS = "userDetails";
-
-	private static final String CUSTOMER = "customer";
-
-	private static final String AFFILIATE = "affiliate";
-
-	private static final String EMPLOYEE = "employee";
+	private static final ExternalHashOperations hashOperations = ExternalHashOperations.getInstance();
 
 	private static final Logger logger = LogManager.getLogger(ElasticClientOperations.class);
 
@@ -110,6 +70,7 @@ public class ElasticClientOperations {
 
 	/**
 	 * This method is used to close elastic client gracefully
+	 * 
 	 * @return
 	 */
 	public boolean closeClient() {
@@ -118,7 +79,7 @@ public class ElasticClientOperations {
 			client.close();
 			isClosed = true;
 		} catch (Exception e) {
-			logger.error(COULD_NOT_CLOSE_THE_CLIENT, e);
+			logger.error(Constants.COULD_NOT_CLOSE_THE_CLIENT, e);
 		}
 		return isClosed;
 	}
@@ -149,15 +110,17 @@ public class ElasticClientOperations {
 	 * @throws Exception
 	 */
 	public ResponseEntity<String> calculateBasket(JsonObject basketAndUserDetailsObj, String index) throws Exception {
-		JsonObject userDetailsObj = basketAndUserDetailsObj.get(USER_DETAILS).getAsJsonObject();
-		JsonArray basketDetailsList = basketAndUserDetailsObj.get(BASKET_DETAILS).getAsJsonArray();
+		JsonObject userDetailsObj = basketAndUserDetailsObj.get(Constants.USER_DETAILS).getAsJsonObject();
+		JsonArray basketDetailsList = basketAndUserDetailsObj.get(Constants.BASKET_DETAILS).getAsJsonArray();
 
 		HashMap<String, Integer> productAmounts = new HashMap<String, Integer>();
 		BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
 		for (JsonElement basketElement : basketDetailsList) {
 			JsonObject basketObject = basketElement.getAsJsonObject();
-			boolQuery.should(QueryBuilders.termQuery(PRODUCT_NAME, basketObject.get(PRODUCT_NAME).getAsString()));
-			productAmounts.put(basketObject.get(PRODUCT_NAME).getAsString(), basketObject.get(AMOUNT).getAsInt());
+			boolQuery.should(QueryBuilders.termQuery(Constants.PRODUCT_NAME,
+					basketObject.get(Constants.PRODUCT_NAME).getAsString()));
+			productAmounts.put(basketObject.get(Constants.PRODUCT_NAME).getAsString(),
+					basketObject.get(Constants.AMOUNT).getAsInt());
 		}
 		HashMap<String, Long> groceriesProducts = new HashMap<String, Long>();
 		HashMap<String, Long> otherProducts = new HashMap<String, Long>();
@@ -181,12 +144,12 @@ public class ElasticClientOperations {
 			long discount = (totalProductPrice - (totalProductPrice % 100)) / 100;
 			totalProductPrice = totalProductPrice - (discount * 5);
 			JsonObject responseObj = new JsonObject();
-			responseObj.addProperty(TOTAL_PRICE, totalProductPrice);
+			responseObj.addProperty(Constants.TOTAL_PRICE, totalProductPrice);
 			return ResponseEntity.status(200).body(responseObj.toString());
 		} catch (Exception e) {
-			logger.error(UNEXPECTED_ERROR_OCCUR, e);
+			logger.error(Constants.UNEXPECTED_ERROR_OCCUR, e);
 			JsonObject responseObj = new JsonObject();
-			responseObj.addProperty(ERROR, UNEXPECTED_ERROR_OCCUR);
+			responseObj.addProperty(Constants.ERROR, Constants.UNEXPECTED_ERROR_OCCUR);
 			return ResponseEntity.status(500).body(responseObj.toString());
 		}
 	}
@@ -201,15 +164,15 @@ public class ElasticClientOperations {
 	 */
 	public long calculateDiscountedPriceOfProducts(JsonObject userDetailsObj, long totalOtherProductsPrice)
 			throws ParseException {
-		if (userDetailsObj.get(EMPLOYEE).getAsBoolean()) {
+		if (userDetailsObj.get(Constants.EMPLOYEE).getAsBoolean()) {
 			totalOtherProductsPrice = (totalOtherProductsPrice * 70) / 100;
-		} else if (userDetailsObj.get(AFFILIATE).getAsBoolean()) {
+		} else if (userDetailsObj.get(Constants.AFFILIATE).getAsBoolean()) {
 			totalOtherProductsPrice = (totalOtherProductsPrice * 90) / 100;
-		} else if (userDetailsObj.get(CUSTOMER).getAsBoolean()) {
-			String accountCreationDate = userDetailsObj.get(ACCOUNT_CREATION_DATE).getAsString();
+		} else if (userDetailsObj.get(Constants.CUSTOMER).getAsBoolean()) {
+			String accountCreationDate = userDetailsObj.get(Constants.ACCOUNT_CREATION_DATE).getAsString();
 			long calenderTodayLong = getCalendar().getTimeInMillis();
-			SimpleDateFormat sdf = new SimpleDateFormat(YYYY_MM_DD_HH_MM_SS);
-			sdf.setTimeZone(TimeZone.getTimeZone(GMT_3));
+			SimpleDateFormat sdf = new SimpleDateFormat(Constants.YYYY_MM_DD_HH_MM_SS);
+			sdf.setTimeZone(TimeZone.getTimeZone(Constants.GMT_3));
 			Date date;
 			date = sdf.parse(accountCreationDate);
 			Calendar consentDateCalendar = getCalendar();
@@ -249,18 +212,20 @@ public class ElasticClientOperations {
 				SearchHit[] hits = searchResponse.getHits().getHits();
 				for (SearchHit hit : hits) {
 					JsonObject hitObj = JsonParser.parseString(hit.getSourceAsString()).getAsJsonObject();
-					String type = hitObj.get(TYPE).getAsString();
-					if (type.equals(GROCERIES)) {
-						groceriesProducts.put(hitObj.get(PRODUCT_NAME).getAsString(), hitObj.get(PRICE).getAsLong());
+					String type = hitObj.get(Constants.TYPE).getAsString();
+					if (type.equals(Constants.GROCERIES)) {
+						groceriesProducts.put(hitObj.get(Constants.PRODUCT_NAME).getAsString(),
+								hitObj.get(Constants.PRICE).getAsLong());
 					} else {
-						otherProducts.put(hitObj.get(PRODUCT_NAME).getAsString(), hitObj.get(PRICE).getAsLong());
+						otherProducts.put(hitObj.get(Constants.PRODUCT_NAME).getAsString(),
+								hitObj.get(Constants.PRICE).getAsLong());
 					}
 				}
 				if (hits.length < size) {
 					getNextChunk = false;
 				}
 			} catch (Exception e) {
-				logger.error(UNEXPECTED_ERROR_OCCUR, e);
+				logger.error(Constants.UNEXPECTED_ERROR_OCCUR, e);
 				throw e;
 			}
 			from += size;
@@ -273,7 +238,7 @@ public class ElasticClientOperations {
 	 * @return a Calendar object
 	 */
 	public Calendar getCalendar() {
-		return Calendar.getInstance(TimeZone.getTimeZone(GMT_3));
+		return Calendar.getInstance(TimeZone.getTimeZone(Constants.GMT_3));
 	}
 
 	/**
@@ -292,8 +257,8 @@ public class ElasticClientOperations {
 			int from = 0;
 			boolean getNextChunk = true;
 			while (getNextChunk) {
-				SearchSourceBuilder builder = new SearchSourceBuilder().query(QueryBuilders.termQuery(TYPE, type))
-						.from(from).size(size);
+				SearchSourceBuilder builder = new SearchSourceBuilder()
+						.query(QueryBuilders.termQuery(Constants.TYPE, type)).from(from).size(size);
 				SearchRequest searchRequest = new SearchRequest().indices(index).source(builder);
 				SearchResponse response = null;
 				try {
@@ -308,14 +273,14 @@ public class ElasticClientOperations {
 						getNextChunk = false;
 					}
 				} catch (Exception e) {
-					logger.error(COULD_NOT_SEARCH_IN_ELASTIC, e);
+					logger.error(Constants.COULD_NOT_SEARCH_IN_ELASTIC, e);
 					throw e;
 				}
 				from += size;
 			}
 
 		} catch (Exception e) {
-			logger.error(UNEXPECTED_ERROR_OCCUR, e);
+			logger.error(Constants.UNEXPECTED_ERROR_OCCUR, e);
 			throw e;
 		}
 		logger.info(String.format("got question details for category %s! questionDetails %s", type,
@@ -332,23 +297,23 @@ public class ElasticClientOperations {
 	 * @throws Exception
 	 */
 	public ResponseEntity<String> createUser(JsonObject userDetailsObj, String index) throws Exception {
-		userDetailsObj.addProperty(ACCOUNT_CREATION_DATE, getDateOperations().getCurrentDate());
-		String password = userDetailsObj.get(PASSWORD).getAsString();
-		userDetailsObj.addProperty(PASSWORD, ExternalHashOperations.getInstance().hashText(password));
+		userDetailsObj.addProperty(Constants.ACCOUNT_CREATION_DATE, getDateOperations().getCurrentDate());
+		String password = userDetailsObj.get(Constants.PASSWORD).getAsString();
+		userDetailsObj.addProperty(Constants.PASSWORD, hashOperations.hashText(password));
 		String docId = indexDocument(index, userDetailsObj, null);
 		JsonObject responseObj = new JsonObject();
 		int statusCode = 200;
 		if (docId != null) {
-			responseObj.addProperty(STATUS, SUCCESS);
+			responseObj.addProperty(Constants.STATUS, Constants.SUCCESS);
 		} else {
-			responseObj.addProperty(STATUS, FAILURE);
+			responseObj.addProperty(Constants.STATUS, Constants.FAILURE);
 			statusCode = 500;
 		}
 		return ResponseEntity.status(statusCode).body(responseObj.toString());
 	}
 
 	public DateOperations getDateOperations() {
-		return DateOperations.getInstance();
+		return dateOperations;
 	}
 
 	/**
