@@ -51,10 +51,16 @@ public class ElasticClientOperations {
 	static RestHighLevelClient client;
 
 	/**
-	 * Singleton ElasticClientOperations instance.
+	 * Singleton utility class instance.
 	 */
 	private final static ElasticClientOperations operations = new ElasticClientOperations();
 
+	/**
+	 * Default constructor made private to prevent outside access. Use singleton method getter {@link #getInstance()}
+	 * instead.
+	 *
+	 * @see #getInstance()
+	 */
 	private ElasticClientOperations() {
 	};
 
