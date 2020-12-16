@@ -38,8 +38,6 @@ import com.google.gson.JsonParser;
 @Component
 public class ElasticClientOperations {
 
-	private static final DateOperations dateOperations = DateOperations.getInstance();
-
 	private static final ExternalHashOperations hashOperations = ExternalHashOperations.getInstance();
 
 	private static final Logger logger = LogManager.getLogger(ElasticClientOperations.class);
@@ -319,7 +317,7 @@ public class ElasticClientOperations {
 	}
 
 	public DateOperations getDateOperations() {
-		return dateOperations;
+		return DateOperations.getInstance();
 	}
 
 	/**
