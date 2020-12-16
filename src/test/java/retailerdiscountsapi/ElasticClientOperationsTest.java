@@ -4,6 +4,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.text.ParseException;
+import java.util.Calendar;
 import java.util.HashMap;
 
 import org.elasticsearch.client.RestHighLevelClient;
@@ -14,6 +15,7 @@ import org.junit.Test;
 import org.mockito.Mockito;
 import org.springframework.data.elasticsearch.client.ClientConfiguration;
 import org.springframework.data.elasticsearch.client.RestClients;
+import org.springframework.http.ResponseEntity;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -48,9 +50,16 @@ public class ElasticClientOperationsTest {
 		Mockito.doCallRealMethod().when(operations).indexDocument(Mockito.anyString(), Mockito.any(),
 				Mockito.anyString());
 		Mockito.doCallRealMethod().when(operations).getCalendar();
+		Mockito.doCallRealMethod().when(operations).getDateOperations();
 		Mockito.doCallRealMethod().when(operations).getTypeRelatedProducts(Mockito.anyString(), Mockito.anyString());
 		Mockito.doCallRealMethod().when(operations).createUser(Mockito.any(JsonObject.class), Mockito.anyString());
-
+		DateOperations mockDateOperations = Mockito.mock(DateOperations.class);
+		Mockito.doCallRealMethod().when(mockDateOperations).getCalendar();
+		Mockito.doCallRealMethod().when(mockDateOperations).getCurrentDate();
+		Calendar calender = Calendar.getInstance();
+		calender.set(2020, 3, 3, 9, 9, 9);
+		Mockito.when(mockDateOperations.getCalendar()).thenReturn(calender);
+		Mockito.when(operations.getDateOperations()).thenReturn(mockDateOperations);
 		operations.setClient(testClient);
 		clientUtils = new ClientUtils(testClient);
 
@@ -108,12 +117,52 @@ public class ElasticClientOperationsTest {
 		assertEquals(1, otherProducts.size());
 		assertEquals(100, otherProducts.get("Red Carpet"));
 	}
+	
+	@Test
+	public void calculateBasket() throws Exception {
+		// set up
+		String initialQuestionsStr = "[{\"productName\":\"Blue Shoes\",\"type\":\"shoes\",\"price\":200},{\"productName\":\"Blue Dress\",\"type\":\"garment\",\"price\":400},{\"productName\":\"Red Carpet\",\"type\":\"home\",\"price\":100},{\"productName\":\"Red Sofa\",\"type\":\"home\",\"price\":150},{\"productName\":\"Bananas\",\"type\":\"groceries\",\"price\":15},{\"productName\":\"Mango\",\"type\":\"groceries\",\"price\":15},{\"productName\":\"Apple\",\"type\":\"groceries\",\"price\":15}]";
+		JsonArray initialQuestions = JsonParser.parseString(initialQuestionsStr).getAsJsonArray();
+		indexDocuments(initialQuestions);
+		clientUtils.refresh(PRODUCT_INDEX);
+		BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
+		boolQuery.should(QueryBuilders.termQuery("productName", "Red Carpet"));
+		String userInfo = "{\"userDetails\":{\"username\":\"example@mail.com\",\"employee\":true,\"affiliate\":true,\"customer\":true,\"accountCreationDate\":\"2020-12-16 00:12:47\"},\"basketDetails\":[{\"productName\":\"Red Carpet\",\"amount\":1},{\"productName\":\"Blue Dress\",\"amount\":2},{\"productName\":\"Bananas\",\"amount\":1}]}";
+		// execute
+		ResponseEntity<String> entity = operations.calculateBasket(JsonParser.parseString(userInfo).getAsJsonObject(), PRODUCT_INDEX);
+
+		String expectedEntityBody = "{\"totalPrice\":615}";
+		// assert
+		assertEquals(JsonParser.parseString(expectedEntityBody).getAsJsonObject(), JsonParser.parseString(entity.getBody()).getAsJsonObject());
+		assertEquals(200, entity.getStatusCodeValue());
+	}
+
+	@Test
+	public void createUser() throws Exception {
+		// set up
+		String initialQuestionsStr = "[{\"productName\":\"Blue Shoes\",\"type\":\"shoes\",\"price\":200},{\"productName\":\"Blue Dress\",\"type\":\"garment\",\"price\":400},{\"productName\":\"Red Carpet\",\"type\":\"home\",\"price\":100},{\"productName\":\"Red Sofa\",\"type\":\"home\",\"price\":150},{\"productName\":\"Bananas\",\"type\":\"groceries\",\"price\":15},{\"productName\":\"Mango\",\"type\":\"groceries\",\"price\":15},{\"productName\":\"Apple\",\"type\":\"groceries\",\"price\":15}]";
+		JsonArray initialQuestions = JsonParser.parseString(initialQuestionsStr).getAsJsonArray();
+		indexDocuments(initialQuestions);
+		clientUtils.refresh(PRODUCT_INDEX);
+		BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
+		boolQuery.should(QueryBuilders.termQuery("productName", "Red Carpet"));
+		String userInfo = "{\"username\":\"example@mail.com\",\"password\":\"123456\",\"employee\":true,\"affiliate\":true,\"customer\":true}";
+
+		// execute
+		operations.createUser(JsonParser.parseString(userInfo).getAsJsonObject(), USERINFO_INDEX);
+
+		clientUtils.refresh(USERINFO_INDEX);
+		JsonArray documents = clientUtils.getAllDocuments(USERINFO_INDEX);
+		// assert
+		String expectedDocuments = "[{\"username\":\"example@mail.com\",\"password\":\"8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92\",\"employee\":true,\"affiliate\":true,\"customer\":true,\"accountCreationDate\":\"2020-04-03 09:09:09\"}]";
+		assertEquals(JsonParser.parseString(expectedDocuments).getAsJsonArray(), documents);
+	}
 
 	@Test
 	public void indexDocument() throws Exception {
 		// set up
 		String documentStr = "{\"productName\":\"Blue Shoes\",\"type\":\"shoes\",\"price\":200}";
-		
+
 		// execute
 		operations.indexDocument(PRODUCT_INDEX, JsonParser.parseString(documentStr).getAsJsonObject(), "id");
 		clientUtils.refresh(PRODUCT_INDEX);
@@ -134,4 +183,5 @@ public class ElasticClientOperationsTest {
 			}
 		}
 	}
+
 }

@@ -6,6 +6,10 @@ import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.get.GetResponse;
+import org.elasticsearch.action.search.ClearScrollRequest;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.search.SearchScrollRequest;
 import org.elasticsearch.action.support.master.AcknowledgedResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestHighLevelClient;
@@ -14,7 +18,17 @@ import org.elasticsearch.client.indices.CreateIndexResponse;
 import org.elasticsearch.client.indices.GetIndexRequest;
 import org.elasticsearch.client.indices.PutIndexTemplateRequest;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.Scroll;
+import org.elasticsearch.search.SearchHit;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
 public class ClientUtils {
 
@@ -95,4 +109,61 @@ public class ClientUtils {
 		return doc;
 	}
 
+	public String getAll(String indexName, String id) throws Exception {
+		String doc = null;
+		GetResponse response = testClient.get(new GetRequest().index(indexName).id(id), RequestOptions.DEFAULT);
+		if (response.isExists() && !response.isSourceEmpty()) {
+			doc = response.getSourceAsString();
+		}
+		return doc;
+	}
+
+	public JsonArray getAllDocuments(String index) throws Exception {
+		final Scroll scroll = new Scroll(TimeValue.timeValueMinutes(1L));
+		SearchRequest searchRequest = new SearchRequest(index);
+		searchRequest.scroll(scroll);
+		SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+		searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+		searchRequest.source(searchSourceBuilder);
+
+		SearchResponse searchResponse = null;
+		searchResponse = testClient.search(searchRequest, RequestOptions.DEFAULT);
+		String scrollId = searchResponse.getScrollId();
+		SearchHit[] searchHits = searchResponse.getHits().getHits();
+
+		JsonArray indexDocuments = new JsonArray();
+		// add search hits objects to indexDocuments array
+		indexDocuments.addAll(getSearchHits(searchHits));
+
+		while (searchHits != null && searchHits.length > 0) {
+			if (scroll != null) {
+				SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId);
+				scrollRequest.scroll(scroll);
+				searchResponse = testClient.scroll(scrollRequest, RequestOptions.DEFAULT);
+				scrollId = searchResponse.getScrollId();
+				searchHits = searchResponse.getHits().getHits();
+				indexDocuments.addAll(getSearchHits(searchHits));
+			} else {
+				break;
+			}
+		}
+		if (scrollId != null) {
+			ClearScrollRequest clearScrollRequest = new ClearScrollRequest();
+			clearScrollRequest.addScrollId(scrollId);
+			testClient.clearScroll(clearScrollRequest, RequestOptions.DEFAULT);
+		}
+		return indexDocuments;
+	}
+
+	private JsonArray getSearchHits(SearchHit[] searchHits) {
+		JsonArray documents = new JsonArray();
+		if (searchHits != null) {
+			for (SearchHit hit : searchHits) {
+				JsonElement hitEl = new Gson().fromJson(hit.getSourceAsString(), JsonElement.class);
+				JsonObject hitObj = hitEl.getAsJsonObject();
+				documents.add(hitObj);
+			}
+		}
+		return documents;
+	}
 }
