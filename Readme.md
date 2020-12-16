@@ -110,3 +110,6 @@ mvn spring-boot:run
 ```
 mvn clean test
 ```
+
+# NOTE:
+Please be sure that there is not any program that runs on port 8080!
